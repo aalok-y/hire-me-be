@@ -8,7 +8,7 @@ from utils.pymango_wrappers import async_insert_one,async_find_one
 from config import resumes_collection
 from services.parsers import parse_jd_with_gemini
 from config import resumes_collection, jds_collection
-
+from utils.pymango_wrappers import convert_objectids
 
 
 
@@ -55,23 +55,21 @@ async def get_resume(resume_id: str):
         raise HTTPException(status_code=404, detail="Resume not found")
     resume["_id"] = str(resume["_id"])
     return resume
+
+
+
 async def get_jd(job_id: str):
-    # Strip and validate job_id
     job_id = job_id.strip()
     if not ObjectId.is_valid(job_id):
         raise HTTPException(status_code=400, detail="Invalid job ID")
-    
-    # Convert to ObjectId and query database
+
     job_doc = await async_find_one(jds_collection, {"_id": ObjectId(job_id)})
-    
-    # Raise 404 if not found
     if not job_doc:
         raise HTTPException(status_code=404, detail="Job description not found")
-    
-    # Convert ObjectId to string for JSON response
-    job_doc["_id"] = str(job_doc["_id"])
-    
+
+    job_doc = convert_objectids(job_doc)  # recursively convert ObjectIds
     return job_doc
+
 
 
 async def upload_jd(

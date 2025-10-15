@@ -3,10 +3,12 @@ from fastapi import HTTPException,Body
 from bson import ObjectId
 from google import genai
 from pydantic import BaseModel
-from typing import List, Dict, Any
+from typing import List
 from utils.pymango_wrappers import async_insert_one,async_find_one 
 from config import resumes_collection, assessments_collection, jds_collection
 from config import client
+from bson import json_util
+
 
 class ChatTurn(BaseModel):
     role: str  # 'model' or 'user'
@@ -42,7 +44,7 @@ async def assess_candidate_interview(request: AssessCandidateInterviewRequest):
 
     # Convert docs to JSON strings (you may need json.dumps if needed)
     import json
-    job_desc_json = json.dumps(job_desc_doc)
+    job_desc_json = json_util.dumps(job_desc_doc)
     resume_json = json.dumps(resume_doc)
 
     # Prepare system prompt with instructions for Gemini
@@ -169,3 +171,4 @@ Respond ONLY with the next question in natural language suitable for a technical
     chat = client.chats.create(model="gemini-2.5-flash", history=chat_history)
     response = chat.send_message("Next question, please.")
     return {"next_question": response.text}
+
