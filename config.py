@@ -38,7 +38,7 @@ resumes_collection = db.resumes
 assessments_collection = db.assessments
 jds_collection = db.jds
 interviews_collection = db.interviews
-
+applications_collection = db.applications
 
 
 users_collection.create_index("email", unique=True)

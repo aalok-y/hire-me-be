@@ -91,13 +91,12 @@ Only return this JSON. No extra commentary.
     print("Gemini response, candidate assessment:", response.text)
 
     # Parse the JSON output and return
-    from pydantic import parse_raw_as
     class AssessmentResult(BaseModel):
         capabilities_summary: str
         fitment_rating: str
         justification: str
 
-    assessment = AssessmentResult.parse_raw(response.text)
+    assessment = AssessmentResult.model_validate_json(response.text)
     return assessment
 
 

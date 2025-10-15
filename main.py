@@ -1,7 +1,7 @@
 
 from config import app
 from routes.resume_routes import resume_router
-from routes.resume_routes import job_router
+from routes.job_routes import job_router
 from routes.interview_assess_routes import router as interview_router
 from routes.speech_routes import router as speech_router
 from routes.schedule_routes import router as schedule_router
