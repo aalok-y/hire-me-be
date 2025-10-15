@@ -1,4 +1,4 @@
-from fastapi import FastAPI, File, UploadFile, HTTPException, Body
+from fastapi import FastAPI, File, UploadFile, HTTPException, Body, Form
 from pydantic import BaseModel, Field, EmailStr
 from typing import List, Optional
 from bson import ObjectId
@@ -12,18 +12,29 @@ from config import resumes_collection, jds_collection
 
 
 
-async def upload_resume(file: UploadFile = File(...)):  
+async def upload_resume(
+    file: UploadFile = File(...),
+    user_id: str = Form(...)
+):
+    # Validate user_id as ObjectId
+    if not ObjectId.is_valid(user_id):
+        raise HTTPException(status_code=400, detail="Invalid user_id")
+
     if not file.filename.endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files allowed")
+
     try:
         pdf_bytes = await file.read()
         text = extract_text_from_pdf(pdf_bytes)
         if not text.strip():
             raise HTTPException(status_code=400, detail="Empty PDF text")
+
         parsed_resume = await parse_resume_with_gemini(text)
         resume_data = parsed_resume.model_dump()
         resume_data["original_filename"] = file.filename
         resume_data["raw_text"] = text
+        resume_data["user_id"] = user_id  # Add user_id to saved doc
+
         result = await async_insert_one(resumes_collection, resume_data)
         return {
             "message": "Resume parsed and stored",
@@ -34,8 +45,6 @@ async def upload_resume(file: UploadFile = File(...)):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
-
-
 
 async def get_resume(resume_id: str):
     resume_id = ObjectId(resume_id.strip())
@@ -48,7 +57,15 @@ async def get_resume(resume_id: str):
     return resume
 
 
-async def upload_jd(file: UploadFile = File(...)):
+async def upload_jd(
+    file: UploadFile = File(...),
+    user_id: str = Form(...)
+):
+    # Validate user_id
+    if not ObjectId.is_valid(user_id):
+        raise HTTPException(status_code=400, detail="Invalid user_id")
+
+    # Validate file type
     if not file.filename.endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files allowed")
 
@@ -66,6 +83,7 @@ async def upload_jd(file: UploadFile = File(...)):
         jd_data = parsed_jd.model_dump()
         jd_data["original_filename"] = file.filename
         jd_data["raw_text"] = jd_text
+        jd_data["user_id"] = ObjectId(user_id)
 
         # Insert structured JD into MongoDB
         result = await async_insert_one(jds_collection, jd_data)
@@ -74,6 +92,7 @@ async def upload_jd(file: UploadFile = File(...)):
             "message": "Job description parsed and stored",
             "jd_id": str(result.inserted_id),
             "job_title": parsed_jd.job_title,
+            "user_id": user_id
         }
 
     except HTTPException:

@@ -1,15 +1,19 @@
-# main.py
-from fastapi import FastAPI, File, UploadFile, HTTPException, Body
-from pydantic import BaseModel, Field, EmailStr
-from typing import List, Optional
-from bson import ObjectId
+
 from config import app
-from routes.assessment_routes import  router as assesment_router
 from routes.resume_routes import router as resume_router
+from routes.interview_assess_routes import router as interview_router
+from routes.speech_routes import router as speech_router
+from routes.schedule_routes import router as schedule_router
+from auth.routes import router as auth_router
 
 
-app.include_router(assesment_router)
+app.include_router(auth_router)
 app.include_router(resume_router)
+app.include_router(interview_router)
+app.include_router(speech_router)
+app.include_router(schedule_router)
+
+
 
 @app.get("/")
 async def root():
