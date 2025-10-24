@@ -1,5 +1,5 @@
-from fastapi import APIRouter
-from controllers.job_controller import  upload_jd, get_jd, apply_job, get_applicants_for_job
+from fastapi import APIRouter, status
+from controllers.job_controller import  upload_jd, get_jd, apply_job, get_applicants_for_job, delete_job, jobs_created_by_user
 from typing import List
 
 
@@ -9,4 +9,6 @@ job_router.get("/{job_id}")(get_jd)
 job_router.post("/upload-jd")(upload_jd)
 job_router.post("/apply")(apply_job)
 job_router.get("/{job_id}/applicants", response_model=List[dict])(get_applicants_for_job)
-job_router.get("/{user_id}/jobs", response_model=List[str])
+job_router.get("/{user_id}/jobs", response_model=List[str])(jobs_created_by_user)
+job_router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT)(delete_job)
+

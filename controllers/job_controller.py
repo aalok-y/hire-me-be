@@ -1,4 +1,4 @@
-from fastapi import FastAPI, File, UploadFile, HTTPException, Body, Form
+from fastapi import FastAPI, File, UploadFile, HTTPException, Body, Form, Query
 from bson import ObjectId
 from config import app
 from services.parsers import extract_text_from_pdf,parse_resume_with_gemini, extract_json_from_gemini_response
@@ -8,6 +8,7 @@ from services.parsers import parse_jd_with_gemini
 from config import resumes_collection, jds_collection, applications_collection
 from utils.pymango_wrappers import convert_objectids
 import time
+from pymongo.errors import PyMongoError
 
 
 
@@ -122,19 +123,35 @@ async def get_applicants_for_job(job_id: str):
 
 
 
-
-async def get_jobs_created_by_user(user_id: str):
-    # Validate user_id
+def jobs_created_by_user(user_id: str):
     if not ObjectId.is_valid(user_id):
         raise HTTPException(status_code=400, detail="Invalid user_id")
 
     user_obj_id = ObjectId(user_id)
 
-    # Query jobs created by this user
-    cursor = jds_collection.find({"creator_user_id": user_obj_id}, {"_id": 1})
-
     job_ids = []
-    async for doc in cursor:
-        job_ids.append(str(doc["_id"]))
+    try:
+        cursor = jds_collection.find({"user_id": user_obj_id}, {"_id": 1})
+        for doc in cursor:
+            job_ids.append(str(doc["_id"]))
+    except PyMongoError:
+        raise HTTPException(status_code=500, detail="Database query error")
+    except Exception:
+        raise HTTPException(status_code=500, detail="Internal server error")
 
     return job_ids
+
+
+async def delete_job(job_id: str):
+    # Validate job_id
+    if not ObjectId.is_valid(job_id):
+        raise HTTPException(status_code=400, detail="Invalid job_id")
+
+    job_obj_id = ObjectId(job_id)
+
+    delete_result = await jds_collection.delete_one({"_id": job_obj_id})
+
+    if delete_result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    return None
