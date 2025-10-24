@@ -175,3 +175,54 @@ def get_all_jobs():
     except Exception as e:
         raise HTTPException(status_code=500, detail="Failed to fetch jobs from database")
     return job_ids
+
+
+def application_status(application_id: str = Query(...)):
+    if not ObjectId.is_valid(application_id):
+        raise HTTPException(status_code=400, detail="Invalid application_id")
+    
+    app_obj_id = ObjectId(application_id)
+    
+    try:
+        application = applications_collection.find_one({"_id": app_obj_id})
+        
+        if not application:
+            raise HTTPException(status_code=404, detail="Application not found")
+        
+        application["_id"] = str(application["_id"])
+        application["user_id"] = str(application["user_id"])
+        application["resume_id"] = str(application["resume_id"])
+        application["job_id"] = str(application["job_id"])
+        
+        return application
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Failed to fetch application status")
+    
+
+
+def my_applications(user_id: str = Query(...)):
+    # Validate user_id
+    if not ObjectId.is_valid(user_id):
+        raise HTTPException(status_code=400, detail="Invalid user_id")
+    
+    user_obj_id = ObjectId(user_id)
+    
+    try:
+        # Query all applications for this user
+        cursor = applications_collection.find({"user_id": user_obj_id})
+        
+        applications = []
+        for app in cursor:
+            app["_id"] = str(app["_id"])
+            app["user_id"] = str(app["user_id"])
+            app["resume_id"] = str(app["resume_id"])
+            app["job_id"] = str(app["job_id"])
+            applications.append(app)
+        
+        return applications
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Failed to fetch applications")
