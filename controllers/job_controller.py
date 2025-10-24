@@ -9,8 +9,8 @@ from config import resumes_collection, jds_collection, applications_collection
 from utils.pymango_wrappers import convert_objectids
 import time
 from pymongo.errors import PyMongoError
-
-
+from typing import List
+from pydantic import BaseModel
 
 
 async def get_jd(job_id: str):
@@ -71,33 +71,43 @@ async def upload_jd(
         raise HTTPException(status_code=500, detail=f"Job description upload failed: {str(e)}")
 
 
+class JobApplication(BaseModel):
+    user_id: str
+    resume_id: str
+    job_id: str
 
-async def apply_job(user_id: str, resume_id: str, job_id: str):
+
+def apply_job(application: JobApplication):
     # Validate Object IDs
-    if not ObjectId.is_valid(user_id):
+    if not ObjectId.is_valid(application.user_id):
         raise HTTPException(status_code=400, detail="Invalid user_id")
-    if not ObjectId.is_valid(resume_id):
+    if not ObjectId.is_valid(application.resume_id):
         raise HTTPException(status_code=400, detail="Invalid resume_id")
-    if not ObjectId.is_valid(job_id):
+    if not ObjectId.is_valid(application.job_id):
         raise HTTPException(status_code=400, detail="Invalid job_id")
 
-    user_obj_id = ObjectId(user_id)
-    resume_obj_id = ObjectId(resume_id)
-    job_obj_id = ObjectId(job_id)
+    user_obj_id = ObjectId(application.user_id)
+    resume_obj_id = ObjectId(application.resume_id)
+    job_obj_id = ObjectId(application.job_id)
 
     # Define application data
     application_data = {
         "user_id": user_obj_id,
         "resume_id": resume_obj_id,
         "job_id": job_obj_id,
-        "status": "rejected",  
-        "application_date": time.time()  
+        "status": "pending",  # Changed from "rejected" to "pending"
+        "application_date": time.time()
     }
 
-    # Store application in the collection
-    result = await applications_collection.insert_one(application_data)
-
-    return {"application_id": str(result.inserted_id), "status": "Application submitted successfully"}
+    try:
+        # Store application in the collection
+        result = applications_collection.insert_one(application_data)
+        return {
+            "application_id": str(result.inserted_id), 
+            "status": "Application submitted successfully"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Failed to submit application")
 
 
 async def get_applicants_for_job(job_id: str):
@@ -142,16 +152,26 @@ def jobs_created_by_user(user_id: str):
     return job_ids
 
 
-async def delete_job(job_id: str):
-    # Validate job_id
+def delete_job(job_id: str):
     if not ObjectId.is_valid(job_id):
         raise HTTPException(status_code=400, detail="Invalid job_id")
 
     job_obj_id = ObjectId(job_id)
 
-    delete_result = await jds_collection.delete_one({"_id": job_obj_id})
+    delete_result = jds_collection.delete_one({"_id": job_obj_id})
 
     if delete_result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Job not found")
 
     return None
+
+
+def get_all_jobs():
+    job_ids = []
+    try:
+        cursor = jds_collection.find({}, {"_id": 1})
+        for doc in cursor:
+            job_ids.append(str(doc["_id"]))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Failed to fetch jobs from database")
+    return job_ids
