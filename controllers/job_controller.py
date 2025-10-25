@@ -110,25 +110,31 @@ def apply_job(application: JobApplication):
         raise HTTPException(status_code=500, detail="Failed to submit application")
 
 
-async def get_applicants_for_job(job_id: str):
+def get_applicants_for_job(job_id: str):
     # Validate job_id
     if not ObjectId.is_valid(job_id):
         raise HTTPException(status_code=400, detail="Invalid job_id")
 
     job_obj_id = ObjectId(job_id)
 
-    # Query applications for this job
-    cursor = applications_collection.find({"job_id": job_obj_id})
+    try:
+        # Query applications for this job
+        cursor = applications_collection.find({"job_id": job_obj_id})
 
-    applicants = []
-    async for doc in cursor:
-        applicants.append({
-            "user_id": str(doc.get("user_id")),
-            "resume_id": str(doc.get("resume_id")),
-            "status": doc.get("status")
-        })
+        applicants = []
+        for doc in cursor:
+            applicants.append({
+                "user_id": str(doc.get("user_id")),
+                "resume_id": str(doc.get("resume_id")),
+                "status": doc.get("status"),
+                "application_id": str(doc.get("_id"))
+            })
+        
+        return applicants
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Failed to fetch applicants")
 
-    return applicants
 
 
 
