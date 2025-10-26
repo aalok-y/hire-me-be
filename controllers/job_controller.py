@@ -1,4 +1,4 @@
-from fastapi import FastAPI, File, UploadFile, HTTPException, Body, Form, Query
+from fastapi import FastAPI, File, UploadFile, HTTPException, Form, Query, BackgroundTasks
 from bson import ObjectId
 from config import app
 from services.parsers import extract_text_from_pdf,parse_resume_with_gemini, extract_json_from_gemini_response
@@ -11,6 +11,8 @@ import time
 from pymongo.errors import PyMongoError
 from typing import List
 from pydantic import BaseModel
+import requests
+
 
 
 async def get_jd(job_id: str):
@@ -22,7 +24,7 @@ async def get_jd(job_id: str):
     if not job_doc:
         raise HTTPException(status_code=404, detail="Job description not found")
 
-    job_doc = convert_objectids(job_doc)  # recursively convert ObjectIds
+    job_doc = convert_objectids(job_doc)  
     return job_doc
 
 
@@ -77,7 +79,45 @@ class JobApplication(BaseModel):
     job_id: str
 
 
-def apply_job(application: JobApplication):
+def assess_candidate_background(application_id: str, resume_id: str, job_id: str):
+    """Background task to assess candidate"""
+    try:
+        # Call the assessment endpoint
+        response = requests.post(
+            "http://localhost:8000/api/resume/assess-candidate",
+            json={
+                "resume_id": resume_id,
+                "job_id": job_id
+            }
+        )
+        
+        if response.status_code == 200:
+            assessment_data = response.json()
+            # Update application status with assessment_id
+            applications_collection.update_one(
+                {"_id": ObjectId(application_id)},
+                {
+                    "$set": {
+                        "assessment_id": assessment_data.get("assessment_id"),
+                        "status": "assessed"
+                    }
+                }
+            )
+        else:
+            # Mark as failed assessment
+            applications_collection.update_one(
+                {"_id": ObjectId(application_id)},
+                {"$set": {"status": "assessment_failed"}}
+            )
+    except Exception as e:
+        print(f"Background assessment failed: {e}")
+        applications_collection.update_one(
+            {"_id": ObjectId(application_id)},
+            {"$set": {"status": "assessment_failed"}}
+        )
+
+
+def apply_job(application: JobApplication, background_tasks: BackgroundTasks):
     # Validate Object IDs
     if not ObjectId.is_valid(application.user_id):
         raise HTTPException(status_code=400, detail="Invalid user_id")
@@ -95,19 +135,30 @@ def apply_job(application: JobApplication):
         "user_id": user_obj_id,
         "resume_id": resume_obj_id,
         "job_id": job_obj_id,
-        "status": "pending",  # Changed from "rejected" to "pending"
+        "status": "pending",
         "application_date": time.time()
     }
 
     try:
         # Store application in the collection
         result = applications_collection.insert_one(application_data)
+        application_id = str(result.inserted_id)
+        
+        # Add background task to assess candidate
+        background_tasks.add_task(
+            assess_candidate_background,
+            application_id,
+            application.resume_id,
+            application.job_id
+        )
+        
         return {
-            "application_id": str(result.inserted_id), 
-            "status": "Application submitted successfully"
+            "application_id": application_id,
+            "status": "Application submitted successfully. Assessment in progress."
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail="Failed to submit application")
+
 
 
 def get_applicants_for_job(job_id: str):
