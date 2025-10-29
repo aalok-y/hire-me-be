@@ -2,7 +2,7 @@ import os
 from fastapi import APIRouter, UploadFile, File, HTTPException
 
 
-VIDEO_SAVE_DIR = "/home/quantum/Downloads/temp/interview-video"
+VIDEO_SAVE_DIR = "/home/machine/Downloads/temp/interview-video"
 
 
 async def upload_video(file: UploadFile = File(...)):

@@ -1,6 +1,6 @@
 from fastapi import FastAPI, File, UploadFile, HTTPException, Body
 from pydantic import BaseModel, Field, EmailStr
-from typing import List, Optional
+from typing import List, Optional, Literal
 import pdfplumber
 import io
 from config import client
@@ -168,6 +168,7 @@ class JobDescription(BaseModel):
     qualifications: List[str]
     experience_required: Optional[str] = None
     job_description: Optional[str] = None
+    interview_difficulty: Literal["easy", "moderate", "hard"]
 
 
 
@@ -215,7 +216,8 @@ Extract and structure the following job description into this JSON format:
   "preferred_skills": ["list of nice-to-have skills (optional)"],
   "qualifications": ["list of educational/professional qualifications"],
   "experience_required": "string (years or level required)",
-  "job_description": "string (detailed descriptions or notes)"
+  "job_description": "string (detailed descriptions or notes)",
+  "interview_difficulty": "string (easy, moderate, hard)"
 }}
 
 

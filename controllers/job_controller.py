@@ -99,7 +99,7 @@ def assess_candidate_background(application_id: str, resume_id: str, job_id: str
                 {
                     "$set": {
                         "assessment_id": assessment_data.get("assessment_id"),
-                        "status": "assessed"
+                        "status": "resume_assessed"
                     }
                 }
             )
