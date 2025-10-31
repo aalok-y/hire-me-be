@@ -288,7 +288,7 @@ Visual Analysis:
 
     print(f"[Assessment] Stored final assessment: {assessment_id}")
 
-
+    
     return assessment
 
 
@@ -432,12 +432,12 @@ async def get_assessment_summary(application_id: str):
         raise HTTPException(status_code=404, detail="Application not found")
     
     # Get assessment_id
-    assessment_id = application_doc.get("assessment_id")
-    if not assessment_id:
+    interview_id = application_doc.get("interview_id")
+    if not interview_id:
         raise HTTPException(status_code=404, detail="Assessment not found for this application")
-    
+    print("assessment id: ",interview_id)  
     # Fetch final assessment
-    assessment_doc = interview_assessments_collection.find_one({"_id": ObjectId(assessment_id)})
+    assessment_doc = interview_assessments_collection.find_one({"interview_id": ObjectId(interview_id)})
     if not assessment_doc:
         raise HTTPException(status_code=404, detail="Assessment document not found")
     

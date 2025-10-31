@@ -283,3 +283,64 @@ def my_applications(user_id: str = Query(...)):
         
     except Exception as e:
         raise HTTPException(status_code=500, detail="Failed to fetch applications")
+    
+    
+class CandidateDecisionRequest(BaseModel):
+    candidate_accept: bool
+
+
+async def set_candidate_decision(application_id: str, request: CandidateDecisionRequest):
+    """
+    Set candidate decision (accept/reject) for an application
+    POST /api/job/application/{application_id}/decision
+    Body: {"candidate_accept": true/false}
+    """
+    # Validate application_id
+    if not ObjectId.is_valid(application_id):
+        raise HTTPException(status_code=400, detail="Invalid application_id")
+    
+    # Check if application exists
+    application_doc = applications_collection.find_one({"_id": ObjectId(application_id)})
+    if not application_doc:
+        raise HTTPException(status_code=404, detail="Application not found")
+    
+    # Update the candidate_accept field
+    result = applications_collection.update_one(
+        {"_id": ObjectId(application_id)},
+        {"$set": {"candidate_accept": request.candidate_accept}}
+    )
+    
+    if result.modified_count == 0 and result.matched_count == 0:
+        raise HTTPException(status_code=500, detail="Failed to update decision")
+    
+    return {
+        "success": True,
+        "message": "Candidate decision updated successfully",
+        "application_id": application_id,
+        "candidate_accept": request.candidate_accept
+    }
+
+
+async def get_candidate_decision(application_id: str):
+    """
+    Get candidate decision for an application
+    GET /api/job/application/{application_id}/decision
+    Returns: {"candidate_accept": true/false} or {"candidate_accept": null}
+    """
+    # Validate application_id
+    if not ObjectId.is_valid(application_id):
+        raise HTTPException(status_code=400, detail="Invalid application_id")
+    
+    # Find application
+    application_doc = applications_collection.find_one({"_id": ObjectId(application_id)})
+    if not application_doc:
+        raise HTTPException(status_code=404, detail="Application not found")
+    
+    # Get candidate_accept field (returns None if field doesn't exist)
+    candidate_accept = application_doc.get("candidate_accept")
+    
+    return {
+        "application_id": application_id,
+        "candidate_accept": candidate_accept,
+        "decision_exists": candidate_accept is not None
+    }

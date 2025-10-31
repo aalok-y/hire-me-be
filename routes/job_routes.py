@@ -1,5 +1,5 @@
 from fastapi import APIRouter, status
-from controllers.job_controller import upload_jd, get_jd, apply_job, get_applicants_for_job, delete_job, jobs_created_by_user, get_all_jobs, application_status, my_applications
+from controllers.job_controller import upload_jd, get_jd, apply_job, get_applicants_for_job, delete_job, jobs_created_by_user, get_all_jobs, application_status, my_applications, set_candidate_decision, get_candidate_decision
 from typing import List
 
 job_router = APIRouter(prefix="/api/job", tags=["Job"])
@@ -15,3 +15,6 @@ job_router.get("/{job_id}/applicants", response_model=List[dict])(get_applicants
 
 job_router.get("/{job_id}")(get_jd)
 job_router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT)(delete_job)
+
+job_router.post("/application/{application_id}/decision")(set_candidate_decision)
+job_router.get("/application/{application_id}/decision")(get_candidate_decision)
