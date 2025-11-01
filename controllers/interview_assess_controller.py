@@ -289,7 +289,13 @@ Visual Analysis:
     print(f"[Assessment] Stored final assessment: {assessment_id}")
 
     
-    return assessment
+    return {
+        "assessment_id": assessment_id,
+        "capabilities_summary": assessment.capabilities_summary,
+        "fitment_rating": assessment.fitment_rating,
+        "justification": assessment.justification,
+        "video_analysis_insights": assessment.video_analysis_insights
+    }
 
 
 
@@ -365,7 +371,6 @@ Respond ONLY with the next question in natural language suitable for a technical
     return {"next_question": response.text}
 
 
-
 async def get_interview_assessment(application_id: str):
     """
     Fetch complete interview assessment including chat history, video analysis, and final assessment
@@ -402,10 +407,10 @@ async def get_interview_assessment(application_id: str):
                 "processed_at": interview_doc.get("processed_at")
             }
     
-    # Fetch final assessment
-    assessment_id = application_doc.get("assessment_id")
-    if assessment_id:
-        assessment_doc = interview_assessments_collection.find_one({"_id": ObjectId(assessment_id)})
+    # Fetch FINAL assessment (combined resume + interview)
+    final_assessment_id = application_doc.get("final_assessment_id")
+    if final_assessment_id:
+        assessment_doc = interview_assessments_collection.find_one({"_id": ObjectId(final_assessment_id)})
         if assessment_doc:
             response_data["final_assessment"] = {
                 "assessment_id": str(assessment_doc["_id"]),
@@ -416,7 +421,6 @@ async def get_interview_assessment(application_id: str):
             }
     
     return JSONResponse(content=response_data)
-
 
 async def get_assessment_summary(application_id: str):
     """
@@ -431,23 +435,40 @@ async def get_assessment_summary(application_id: str):
     if not application_doc:
         raise HTTPException(status_code=404, detail="Application not found")
     
-    # Get assessment_id
-    interview_id = application_doc.get("interview_id")
-    if not interview_id:
-        raise HTTPException(status_code=404, detail="Assessment not found for this application")
-    print("assessment id: ",interview_id)  
+    # Get status
+    status = application_doc.get("status", "unknown")
+    
+    # Get FINAL assessment_id (changed from "assessment_id")
+    final_assessment_id = application_doc.get("final_assessment_id")
+    
+    # Return status without assessment if not ready yet
+    if not final_assessment_id:
+        return JSONResponse(content={
+            "application_id": application_id,
+            "status": status,
+            "assessment_ready": False,
+            "message": "Final assessment not yet available. Interview may still be processing."
+        })
+    
     # Fetch final assessment
-    assessment_doc = interview_assessments_collection.find_one({"interview_id": ObjectId(interview_id)})
+    assessment_doc = interview_assessments_collection.find_one({"_id": ObjectId(final_assessment_id)})
+    
+    # Handle case where assessment_id exists but document is missing
     if not assessment_doc:
-        raise HTTPException(status_code=404, detail="Assessment document not found")
+        return JSONResponse(content={
+            "application_id": application_id,
+            "status": status,
+            "assessment_ready": False,
+            "message": "Assessment document not found. This may indicate a processing error."
+        })
     
     # Return only assessment data
     return JSONResponse(content={
         "application_id": application_id,
         "assessment_id": str(assessment_doc["_id"]),
-        "status": application_doc.get("status"),
+        "status": status,
+        "assessment_ready": True,
         "assessment": assessment_doc.get("assessment", {}),
         "difficulty": assessment_doc.get("difficulty"),
         "created_at": assessment_doc.get("created_at")
     })
-
