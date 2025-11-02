@@ -362,7 +362,7 @@ async def list_interview_videos(user_id: str):
                 "application_id": app_id,
                 "size_mb": round(size_mb, 2),
                 "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
-                "url": f"/api/interview/video/{app_id}/{user_id}"
+                "url": f"/api/video/{app_id}/{user_id}"
             })
         
         return {
