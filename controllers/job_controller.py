@@ -1,4 +1,4 @@
-from fastapi import FastAPI, File, UploadFile, HTTPException, Form, Query, BackgroundTasks
+from fastapi import FastAPI, File, UploadFile, HTTPException, Form, Query, BackgroundTasks,Path
 from bson import ObjectId
 from config import app
 from services.parsers import extract_text_from_pdf,parse_resume_with_gemini, extract_json_from_gemini_response
@@ -234,30 +234,37 @@ def get_all_jobs():
     return job_ids
 
 
-def application_status(application_id: str = Query(...)):
+async def get_application_details(application_id: str = Query(..., description="Application ID")):
     if not ObjectId.is_valid(application_id):
-        raise HTTPException(status_code=400, detail="Invalid application_id")
+        raise HTTPException(status_code=400, detail="Invalid application_id format")
     
     app_obj_id = ObjectId(application_id)
-    
+    print("app id: ", app_obj_id)
     try:
         application = applications_collection.find_one({"_id": app_obj_id})
         
         if not application:
             raise HTTPException(status_code=404, detail="Application not found")
         
-        application["_id"] = str(application["_id"])
-        application["user_id"] = str(application["user_id"])
-        application["resume_id"] = str(application["resume_id"])
-        application["job_id"] = str(application["job_id"])
+        response = {
+            "_id": str(application["_id"]),
+            "user_id": str(application["user_id"]) if application.get("user_id") else None,
+            "resume_id": str(application["resume_id"]) if application.get("resume_id") else None,
+            "job_id": str(application["job_id"]) if application.get("job_id") else None,
+            "assessment_id": str(application["assessment_id"]) if application.get("assessment_id") else None,  # Resume assessment ID
+            "interview_id": str(application["interview_id"]) if application.get("interview_id") else None,
+            "final_assessment_id": str(application["final_assessment_id"]) if application.get("final_assessment_id") else None,
+            "status": application.get("status"),
+            "application_date": application.get("application_date"),
+            "candidate_accept": application.get("candidate_accept")
+        }
         
-        return application
+        return response
         
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Failed to fetch application status")
-    
+        raise HTTPException(status_code=500, detail=f"Failed to fetch application details: {str(e)}")    
 
 
 def my_applications(user_id: str = Query(...)):
