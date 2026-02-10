@@ -1,18 +1,35 @@
-from fastapi import FastAPI, File, UploadFile, HTTPException, Form, Query, BackgroundTasks,Path
-from bson import ObjectId
-from config import app
-from services.parsers import extract_text_from_pdf,parse_resume_with_gemini, extract_json_from_gemini_response
-from utils.pymango_wrappers import async_insert_one,async_find_one 
-from config import resumes_collection
-from services.parsers import parse_jd_with_gemini
-from config import resumes_collection, jds_collection, applications_collection
-from utils.pymango_wrappers import convert_objectids
 import time
-from pymongo.errors import PyMongoError
 from typing import List
-from pydantic import BaseModel
-import requests
 
+import requests
+from bson import ObjectId
+from fastapi import (
+    BackgroundTasks,
+    FastAPI,
+    File,
+    Form,
+    HTTPException,
+    Path,
+    Query,
+    UploadFile,
+)
+from pydantic import BaseModel
+from pymongo.errors import PyMongoError
+
+from config import (
+    app,
+    applications_collection,
+    jds_collection,
+    resumes_collection,
+    users_collection,
+)
+from services.parsers import (
+    extract_json_from_gemini_response,
+    extract_text_from_pdf,
+    parse_jd_with_gemini,
+    parse_resume_with_gemini,
+)
+from utils.pymango_wrappers import async_find_one, async_insert_one, convert_objectids
 
 
 async def get_jd(job_id: str):
@@ -24,15 +41,11 @@ async def get_jd(job_id: str):
     if not job_doc:
         raise HTTPException(status_code=404, detail="Job description not found")
 
-    job_doc = convert_objectids(job_doc)  
+    job_doc = convert_objectids(job_doc)
     return job_doc
 
 
-
-async def upload_jd(
-    file: UploadFile = File(...),
-    user_id: str = Form(...)
-):
+async def upload_jd(file: UploadFile = File(...), user_id: str = Form(...)):
     # Validate user_id
     if not ObjectId.is_valid(user_id):
         raise HTTPException(status_code=400, detail="Invalid user_id")
@@ -64,13 +77,15 @@ async def upload_jd(
             "message": "Job description parsed and stored",
             "jd_id": str(result.inserted_id),
             "job_title": parsed_jd.job_title,
-            "user_id": user_id
+            "user_id": user_id,
         }
 
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Job description upload failed: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Job description upload failed: {str(e)}"
+        )
 
 
 class JobApplication(BaseModel):
@@ -85,12 +100,9 @@ def assess_candidate_background(application_id: str, resume_id: str, job_id: str
         # Call the assessment endpoint
         response = requests.post(
             "http://localhost:8000/api/resume/assess-candidate",
-            json={
-                "resume_id": resume_id,
-                "job_id": job_id
-            }
+            json={"resume_id": resume_id, "job_id": job_id},
         )
-        
+
         if response.status_code == 200:
             assessment_data = response.json()
             # Update application status with assessment_id
@@ -99,21 +111,20 @@ def assess_candidate_background(application_id: str, resume_id: str, job_id: str
                 {
                     "$set": {
                         "assessment_id": assessment_data.get("assessment_id"),
-                        "status": "resume_assessed"
+                        "status": "resume_assessed",
                     }
-                }
+                },
             )
         else:
             # Mark as failed assessment
             applications_collection.update_one(
                 {"_id": ObjectId(application_id)},
-                {"$set": {"status": "assessment_failed"}}
+                {"$set": {"status": "assessment_failed"}},
             )
     except Exception as e:
         print(f"Background assessment failed: {e}")
         applications_collection.update_one(
-            {"_id": ObjectId(application_id)},
-            {"$set": {"status": "assessment_failed"}}
+            {"_id": ObjectId(application_id)}, {"$set": {"status": "assessment_failed"}}
         )
 
 
@@ -136,29 +147,32 @@ def apply_job(application: JobApplication, background_tasks: BackgroundTasks):
         "resume_id": resume_obj_id,
         "job_id": job_obj_id,
         "status": "pending",
-        "application_date": time.time()
+        "application_date": time.time(),
     }
 
     try:
         # Store application in the collection
         result = applications_collection.insert_one(application_data)
         application_id = str(result.inserted_id)
-        
+
         # Add background task to assess candidate
         background_tasks.add_task(
             assess_candidate_background,
             application_id,
             application.resume_id,
-            application.job_id
+            application.job_id,
         )
-        
+
         return {
             "application_id": application_id,
-            "status": "Application submitted successfully. Assessment in progress."
+            "status": "Application submitted successfully. Assessment in progress.",
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail="Failed to submit application")
 
+
+from bson import ObjectId
+from fastapi import HTTPException
 
 
 def get_applicants_for_job(job_id: str):
@@ -174,20 +188,33 @@ def get_applicants_for_job(job_id: str):
 
         applicants = []
         for doc in cursor:
-            applicants.append({
-                "user_id": str(doc.get("user_id")),
-                "resume_id": str(doc.get("resume_id")),
-                "status": doc.get("status"),
-                "application_id": str(doc.get("_id"))
-            })
-        
+            # 1. Get the raw user_id (likely an ObjectId) from the application
+            raw_user_id = doc.get("user_id")
+
+            # 2. Query the user collection correctly
+            # Use find_one, and ensure we are querying with an ObjectId
+            user_doc = users_collection.find_one(
+                {"_id": ObjectId(raw_user_id)}, {"name": 1}
+            )
+
+            # 3. Safely extract the name (handle case where user might be deleted)
+            user_name = user_doc.get("name") if user_doc else "Unknown User"
+
+            applicants.append(
+                {
+                    "user_name": user_name,
+                    "user_id": str(raw_user_id),
+                    "resume_id": str(doc.get("resume_id")),
+                    "status": doc.get("status"),
+                    "application_id": str(doc.get("_id")),
+                }
+            )
+
         return applicants
-        
+
     except Exception as e:
+        print(f"Error: {e}")  # Good for debugging
         raise HTTPException(status_code=500, detail="Failed to fetch applicants")
-
-
-
 
 
 def jobs_created_by_user(user_id: str):
@@ -230,54 +257,70 @@ def get_all_jobs():
         for doc in cursor:
             job_ids.append(str(doc["_id"]))
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Failed to fetch jobs from database")
+        raise HTTPException(
+            status_code=500, detail="Failed to fetch jobs from database"
+        )
     return job_ids
 
 
-async def get_application_details(application_id: str = Query(..., description="Application ID")):
+async def get_application_details(
+    application_id: str = Query(..., description="Application ID"),
+):
     if not ObjectId.is_valid(application_id):
         raise HTTPException(status_code=400, detail="Invalid application_id format")
-    
+
     app_obj_id = ObjectId(application_id)
     print("app id: ", app_obj_id)
     try:
         application = applications_collection.find_one({"_id": app_obj_id})
-        
+
         if not application:
             raise HTTPException(status_code=404, detail="Application not found")
-        
+
         response = {
             "_id": str(application["_id"]),
-            "user_id": str(application["user_id"]) if application.get("user_id") else None,
-            "resume_id": str(application["resume_id"]) if application.get("resume_id") else None,
+            "user_id": str(application["user_id"])
+            if application.get("user_id")
+            else None,
+            "resume_id": str(application["resume_id"])
+            if application.get("resume_id")
+            else None,
             "job_id": str(application["job_id"]) if application.get("job_id") else None,
-            "assessment_id": str(application["assessment_id"]) if application.get("assessment_id") else None,  # Resume assessment ID
-            "interview_id": str(application["interview_id"]) if application.get("interview_id") else None,
-            "final_assessment_id": str(application["final_assessment_id"]) if application.get("final_assessment_id") else None,
+            "assessment_id": str(application["assessment_id"])
+            if application.get("assessment_id")
+            else None,  # Resume assessment ID
+            "interview_id": str(application["interview_id"])
+            if application.get("interview_id")
+            else None,
+            "final_assessment_id": str(application["final_assessment_id"])
+            if application.get("final_assessment_id")
+            else None,
             "status": application.get("status"),
             "application_date": application.get("application_date"),
-            "candidate_accept": application.get("candidate_accept")
+            "candidate_accept": application.get("candidate_accept"),
         }
-        
+
         return response
-        
+
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch application details: {str(e)}")    
+        raise HTTPException(
+            status_code=500, detail=f"Failed to fetch application details: {str(e)}"
+        )
 
 
 def my_applications(user_id: str = Query(...)):
     # Validate user_id
     if not ObjectId.is_valid(user_id):
         raise HTTPException(status_code=400, detail="Invalid user_id")
-    
+
     user_obj_id = ObjectId(user_id)
-    
+
     try:
         # Query all applications for this user
         cursor = applications_collection.find({"user_id": user_obj_id})
-        
+
         applications = []
         for app in cursor:
             app["_id"] = str(app["_id"])
@@ -285,18 +328,20 @@ def my_applications(user_id: str = Query(...)):
             app["resume_id"] = str(app["resume_id"])
             app["job_id"] = str(app["job_id"])
             applications.append(app)
-        
+
         return applications
-        
+
     except Exception as e:
         raise HTTPException(status_code=500, detail="Failed to fetch applications")
-    
-    
+
+
 class CandidateDecisionRequest(BaseModel):
     candidate_accept: bool
 
 
-async def set_candidate_decision(application_id: str, request: CandidateDecisionRequest):
+async def set_candidate_decision(
+    application_id: str, request: CandidateDecisionRequest
+):
     """
     Set candidate decision (accept/reject) for an application
     POST /api/job/application/{application_id}/decision
@@ -305,26 +350,28 @@ async def set_candidate_decision(application_id: str, request: CandidateDecision
     # Validate application_id
     if not ObjectId.is_valid(application_id):
         raise HTTPException(status_code=400, detail="Invalid application_id")
-    
+
     # Check if application exists
-    application_doc = applications_collection.find_one({"_id": ObjectId(application_id)})
+    application_doc = applications_collection.find_one(
+        {"_id": ObjectId(application_id)}
+    )
     if not application_doc:
         raise HTTPException(status_code=404, detail="Application not found")
-    
+
     # Update the candidate_accept field
     result = applications_collection.update_one(
         {"_id": ObjectId(application_id)},
-        {"$set": {"candidate_accept": request.candidate_accept}}
+        {"$set": {"candidate_accept": request.candidate_accept}},
     )
-    
+
     if result.modified_count == 0 and result.matched_count == 0:
         raise HTTPException(status_code=500, detail="Failed to update decision")
-    
+
     return {
         "success": True,
         "message": "Candidate decision updated successfully",
         "application_id": application_id,
-        "candidate_accept": request.candidate_accept
+        "candidate_accept": request.candidate_accept,
     }
 
 
@@ -337,17 +384,19 @@ async def get_candidate_decision(application_id: str):
     # Validate application_id
     if not ObjectId.is_valid(application_id):
         raise HTTPException(status_code=400, detail="Invalid application_id")
-    
+
     # Find application
-    application_doc = applications_collection.find_one({"_id": ObjectId(application_id)})
+    application_doc = applications_collection.find_one(
+        {"_id": ObjectId(application_id)}
+    )
     if not application_doc:
         raise HTTPException(status_code=404, detail="Application not found")
-    
+
     # Get candidate_accept field (returns None if field doesn't exist)
     candidate_accept = application_doc.get("candidate_accept")
-    
+
     return {
         "application_id": application_id,
         "candidate_accept": candidate_accept,
-        "decision_exists": candidate_accept is not None
+        "decision_exists": candidate_accept is not None,
     }
