@@ -1,13 +1,10 @@
+import os
+
+import pymongo
 from dotenv import load_dotenv
 from fastapi import FastAPI
-import pymongo
-from google import genai
-import os
-# main.py
-
 from fastapi.middleware.cors import CORSMiddleware
-
-
+from google import genai
 
 # Load environment variables
 load_dotenv()
@@ -24,8 +21,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,  # allows requests from these origins
     allow_credentials=True,
-    allow_methods=["*"],    # allow all methods (GET, POST, etc.)
-    allow_headers=["*"],    # allow all headers
+    allow_methods=["*"],  # allow all methods (GET, POST, etc.)
+    allow_headers=["*"],  # allow all headers
 )
 
 
@@ -35,12 +32,10 @@ mongo_client = pymongo.MongoClient(MONGO_URI)
 db = mongo_client.interview_platform
 users_collection = db.users
 resumes_collection = db.resumes
-assessments_collection = db.assessments    #resume assessment
+assessments_collection = db.assessments  # resume assessment
 jds_collection = db.jds
 interviews_collection = db.interviews
 applications_collection = db.applications
 interview_assessments_collection = db.interviews_assessment
 
 users_collection.create_index("email", unique=True)
-
-

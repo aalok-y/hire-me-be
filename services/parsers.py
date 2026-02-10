@@ -1,13 +1,19 @@
-from fastapi import FastAPI, File, UploadFile, HTTPException, Body
-from pydantic import BaseModel, Field, EmailStr
-from typing import List, Optional, Literal
-import pdfplumber
 import io
-from config import client
-from google.genai import types
 import re
+from typing import List, Literal, Optional
+
+import pdfplumber
+from fastapi import Body, FastAPI, File, HTTPException, UploadFile
+from google.genai import types
+from pydantic import BaseModel, EmailStr, Field
+
+from config import client
+
+# --- Resume Models ---
+
 
 class ContactInformation(BaseModel):
+    # Using Optional for everything ensures partial data doesn't crash the parser
     email: Optional[EmailStr] = None
     phone: Optional[str] = None
     linkedIn: Optional[str] = None
@@ -16,97 +22,19 @@ class ContactInformation(BaseModel):
 
 
 class Header(BaseModel):
-    full_name: str
-    contact_information: ContactInformation
+    full_name: Optional[str] = None
+    contact_information: Optional[ContactInformation] = None
 
 
 class Experience(BaseModel):
-    job_title: str
-    company_name: str
-    location: Optional[str] = None
-    start_date: Optional[str] = None
-    end_date: Optional[str] = None
-    responsibilities: List[str] = []
-    technologies_used: List[str] = []
-
-
-class Education(BaseModel):
-    degree: str
-    major: Optional[str] = None
-    university: str
-    location: Optional[str] = None
-    start_date: Optional[str] = None
-    end_date: Optional[str] = None
-    additional_info: Optional[str] = None
-
-
-class Project(BaseModel):
-    project_name: str
-    description: str
-    technologies_used: List[str] = []
-    role: Optional[str] = None
-    link: Optional[str] = None
-
-
-class Certification(BaseModel):
-    certification_name: str
-    issuing_organization: str
-    issue_date: Optional[str] = None
-    expiration_date: Optional[str] = None
-
-
-class AwardHonor(BaseModel):
-    title: str
-    issuer: str
-    date_received: Optional[str] = None
-
-
-class Language(BaseModel):
-    language: str
-    proficiency: str
-
-
-class Resume(BaseModel):
-    header: Header
-    summary: Optional[str] = None
-    skills: List[str] = []
-    experience: List[Experience] = []
-    education: List[Education] = []
-    projects: List[Project] = []
-    certifications: List[Certification] = []
-    awards_and_honors: List[AwardHonor] = []
-    languages: List[Language] = []
-    interests: List[str] = []
-
-
-
-class ResumeDocument(BaseModel):
-    resume: Resume
-
-
-
-
-class ContactInformation(BaseModel):
-    email: Optional[EmailStr] = None
-    phone: Optional[str] = None
-    linkedIn: Optional[str] = None
-    github: Optional[str] = None
-    portfolio_website: Optional[str] = None
-
-
-class Header(BaseModel):
-    full_name: str
-    contact_information: ContactInformation
-
-
-class Experience(BaseModel):
-    job_title: str
+    job_title: Optional[str] = None
     company_name: Optional[str] = None
     location: Optional[str] = None
     start_date: Optional[str] = None
     end_date: Optional[str] = None
-    responsibilities: List[str] = []
-    technologies_used: List[str] = []
+    # Using default_factory=list handles cases where the field is missing entirely
+    responsibilities: List[str] = Field(default_factory=list)
+    technologies_used: List[str] = Field(default_factory=list)
 
 
 class Education(BaseModel):
@@ -120,59 +48,63 @@ class Education(BaseModel):
 
 
 class Project(BaseModel):
-    project_name: str
-    description: str
-    technologies_used: List[str] = []
+    project_name: Optional[str] = None
+    description: Optional[str] = None
+    technologies_used: List[str] = Field(default_factory=list)
     role: Optional[str] = None
     link: Optional[str] = None
 
 
 class Certification(BaseModel):
-    certification_name: str
-    issuing_organization: str
+    certification_name: Optional[str] = None
+    issuing_organization: Optional[str] = None
     issue_date: Optional[str] = None
     expiration_date: Optional[str] = None
 
 
 class AwardHonor(BaseModel):
-    title: str
-    issuer: str
+    title: Optional[str] = None
+    issuer: Optional[str] = None
     date_received: Optional[str] = None
 
 
 class Language(BaseModel):
-    language: str
-    proficiency: str
+    language: Optional[str] = None
+    proficiency: Optional[str] = None
 
 
 class Resume(BaseModel):
-    header: Header
+    header: Optional[Header] = None
     summary: Optional[str] = None
-    skills: List[str] = []
-    experience: List[Experience] = []
-    education: List[Education] = []
-    projects: List[Project] = []
-    certifications: List[Certification] = []
-    awards_and_honors: List[AwardHonor] = []
-    languages: List[Language] = []
-    interests: List[str] = []
+    skills: List[str] = Field(default_factory=list)
+    experience: List[Experience] = Field(default_factory=list)
+    education: List[Education] = Field(default_factory=list)
+    projects: List[Project] = Field(default_factory=list)
+    certifications: List[Certification] = Field(default_factory=list)
+    awards_and_honors: List[AwardHonor] = Field(default_factory=list)
+    languages: List[Language] = Field(default_factory=list)
+    interests: List[str] = Field(default_factory=list)
 
 
-    
+class ResumeDocument(BaseModel):
+    resume: Optional[Resume] = None
+
+
+# --- Job Description Model ---
+
+
 class JobDescription(BaseModel):
-    job_title: str
+    job_title: Optional[str] = None
     company_name: Optional[str] = None
-    job_requirements: List[str]
-    required_skills: List[str]
-    preferred_skills: Optional[List[str]] = []
-    qualifications: List[str]
+    job_requirements: List[str] = Field(default_factory=list)
+    required_skills: List[str] = Field(default_factory=list)
+    preferred_skills: List[str] = Field(default_factory=list)
+    qualifications: List[str] = Field(default_factory=list)
     experience_required: Optional[str] = None
     job_description: Optional[str] = None
-    interview_difficulty: Literal["easy", "moderate", "hard"]
-
-
-
-
+    # Changed from Literal["easy", ...] to Optional[str] to prevent crashing
+    # if the LLM returns "Medium" or "Very Hard"
+    interview_difficulty: Optional[str] = None
 
 
 def extract_json_from_gemini_response(text: str) -> str:
@@ -224,26 +156,28 @@ Extract and structure the following job description into this JSON format:
 Please output ONLY the JSON matching the above schema.Write None if specific details are not mentionedd
 """
         response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=f"""Job Description Text: {jd_text}""",
-        config=types.GenerateContentConfig(
-        thinking_config=types.ThinkingConfig(thinking_budget=1),
-        system_instruction=system_prompt))
-        
+            model="gemini-2.5-flash",
+            contents=f"""Job Description Text: {jd_text}""",
+            config=types.GenerateContentConfig(
+                thinking_config=types.ThinkingConfig(thinking_budget=1),
+                system_instruction=system_prompt,
+            ),
+        )
+
         clean_json = extract_json_from_gemini_response(response.text)
         return JobDescription.parse_raw(clean_json)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Gemini job description parsing failed: {str(e)}")
-
-
+        raise HTTPException(
+            status_code=500, detail=f"Gemini job description parsing failed: {str(e)}"
+        )
 
 
 async def parse_resume_with_gemini(resume_text: str) -> ResumeDocument:
     try:
         prompt = """
-You are an expert resume parser. 
-Extract and structure all relevant details from the following resume strictly in this JSON format. 
-If a detail is missing in the resume, return null for that field or an empty array for lists. 
+You are an expert resume parser.
+Extract and structure all relevant details from the following resume strictly in this JSON format.
+If a detail is missing in the resume, return null for that field or an empty array for lists.
 Do not include any explanation, markdown, or text outside the JSON.
 
 {
@@ -331,16 +265,17 @@ Only output the filled JSON matching the schema above, with all available fields
 """
 
         response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=f"""Resume Text: {resume_text}""",
-        config=types.GenerateContentConfig(
-        thinking_config=types.ThinkingConfig(thinking_budget=1),
-        system_instruction=prompt))
-        
+            model="gemini-2.5-flash",
+            contents=f"""Resume Text: {resume_text}""",
+            config=types.GenerateContentConfig(
+                thinking_config=types.ThinkingConfig(thinking_budget=1),
+                system_instruction=prompt,
+            ),
+        )
+
         # Parse to ResumeDocument
-        print("gemini response: ",response.text)
+        print("gemini response: ", response.text)
         clean_json = extract_json_from_gemini_response(response.text)
         return ResumeDocument.parse_raw(clean_json)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Gemini parsing failed: {str(e)}")
-
